@@ -1,0 +1,93 @@
+--- a/NSObject.mm/AutoreleasePoolPage
++++ b/runtime/AutoreleasePool.cpp/AutoreleasePoolPage
+@@ -11,7 +11,7 @@
+ #endif
+     
+ private:
+-	static pthread_key_t const key = AUTORELEASE_POOL_KEY;
++	static pthread_key_t key;
+ 	static uint8_t const SCRIBBLE = 0xA3;  // 0xA3A3A3A3 after releasing
+ 	static size_t const COUNT = SIZE / sizeof(id);
+     static size_t const MAX_FAULTS = 2;
+@@ -254,10 +254,10 @@
+                 // release count+1 times since it is count of the additional
+                 // autoreleases beyond the first one
+                 for (int i = 0; i < count + 1; i++) {
+-                    objc_release(obj);
++                    cpp_arc_runtime::releaseAutoreleased(obj);
+                 }
+ #else
+-                objc_release(obj);
++                cpp_arc_runtime::releaseAutoreleased(obj);
+ #endif
+             }
+         }
+@@ -294,6 +294,7 @@
+ 
+     static void tls_dealloc(void *p) 
+     {
++        protectTokenTeardown();
+         if (p == (void*)EMPTY_POOL_PLACEHOLDER) {
+             // No objects or pool pages to clean up here.
+             return;
+@@ -303,7 +304,7 @@
+         setHotPage((AutoreleasePoolPage *)p);
+ 
+         if (AutoreleasePoolPage *page = coldPage()) {
+-            if (!page->empty()) objc_autoreleasePoolPop(page->begin());  // pop all of the pools
++            if (!page->empty()) pop(page->begin());  // pop all of the pools
+             if (slowpath(DebugMissingPools || DebugPoolAllocation)) {
+                 // pop() killed the pages already
+             } else {
+@@ -427,7 +428,7 @@
+                          "autoreleased with no pool in place - "
+                          "just leaking - break on "
+                          "objc_autoreleaseNoPool() to debug", 
+-                         objc_thread_self(), (void*)obj, object_getClassName(obj));
++                         objc_thread_self(), (void*)obj, "C++");
+             objc_autoreleaseNoPool(obj);
+             return nil;
+         }
+@@ -465,7 +466,7 @@
+ public:
+     static inline id autorelease(id obj)
+     {
+-        ASSERT(!obj->isTaggedPointerOrNil());
++        ASSERT(obj != nullptr);
+         id *dest __unused = autoreleaseFast(obj);
+ #if SUPPORT_AUTORELEASEPOOL_DEDUP_PTRS
+         ASSERT(!dest  ||  dest == EMPTY_POOL_PLACEHOLDER  ||  (id)((AutoreleasePoolEntry *)dest)->ptr == obj);
+@@ -592,11 +593,15 @@
+         return popPage<false>(token, page, stop);
+     }
+ 
++    // Either TLS destructor can run first. The token registry remains available
++    // until page draining finishes; traversal and draining stay Apple's.
++    static void cleanupThread() { tls_dealloc(tls_get_direct(key)); }
++
+     static void init()
+     {
+-        int r __unused = pthread_key_init_np(AutoreleasePoolPage::key, 
++        int r __unused = pthread_key_create(&AutoreleasePoolPage::key, 
+                                              AutoreleasePoolPage::tls_dealloc);
+-        ASSERT(r == 0);
++        if (r != 0) _objc_fatal("cpp ARC: pthread_key_create failed");
+     }
+ 
+     __attribute__((noinline, cold))
+@@ -616,13 +621,13 @@
+                 if (entry->count > 0) {
+                     id obj = (id)entry->ptr;
+                     _objc_inform("[%p]  %#16lx  %s  autorelease count %u",
+-                                 p, (unsigned long)obj, object_getClassName(obj),
++                                 p, (unsigned long)obj, "C++",
+                                  entry->count + 1);
+                     goto done;
+                 }
+ #endif
+                 _objc_inform("[%p]  %#16lx  %s",
+-                             p, (unsigned long)*p, object_getClassName(*p));
++                             p, (unsigned long)*p, "C++");
+              done:;
+             }
+         }

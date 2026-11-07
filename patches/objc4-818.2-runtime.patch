@@ -1,0 +1,248 @@
+--- a/objc4/runtime/NSObject.mm
++++ b/objc4/runtime/NSObject.mm
+@@ -39,7 +39,7 @@
+ #include <map>
+ #include <execinfo.h>
+ #include "NSObject-internal.h"
+-#include <os/feature_private.h>
++//#include <os/feature_private.h>
+ 
+ extern "C" {
+ #include <os/reason_private.h>
+--- a/objc4/runtime/llvm-DenseMap.h
++++ b/objc4/runtime/llvm-DenseMap.h
+@@ -30,7 +30,11 @@
+ #include <utility>
+ #include <TargetConditionals.h>
+ 
++#if defined(CPP_ARC_RUNTIME)
++#include "NativeSupport.h"
++#else
+ #include "objc-private.h"
++#endif
+ 
+ #define MIN_BUCKETS 4
+ #define MIN_COMPACT 1024
+--- a/objc4/runtime/llvm-DenseMapInfo.h
++++ b/objc4/runtime/llvm-DenseMapInfo.h
+@@ -16,7 +16,11 @@
+ #ifndef LLVM_ADT_DENSEMAPINFO_H
+ #define LLVM_ADT_DENSEMAPINFO_H
+ 
++#if defined(CPP_ARC_RUNTIME)
++#include "NativeSupport.h"
++#else
+ #include "objc-private.h"
++#endif
+ #include "llvm-type_traits.h"
+ 
+ namespace objc {
+--- a/objc4/runtime/objc-block-trampolines.mm
++++ b/objc4/runtime/objc-block-trampolines.mm
+@@ -170,10 +170,10 @@
+ 
+         // This code may be called concurrently.
+         // In the worst case we perform extra dyld operations.
+-        void *dylib = dlopen("/usr/lib/libobjc-trampolines.dylib",
++        void *dylib = dlopen("@loader_path/libcpparc-trampolines.dylib",
+                              RTLD_NOW | RTLD_LOCAL | RTLD_FIRST);
+         if (!dylib) {
+-            _objc_fatal("couldn't dlopen libobjc-trampolines.dylib: %s",
++            _objc_fatal("couldn't dlopen libcpparc-trampolines.dylib: %s",
+                         dlerror());
+         }
+ 
+--- a/objc4/runtime/objc-cache.mm
++++ b/objc4/runtime/objc-cache.mm
+@@ -84,8 +84,8 @@
+ #include "objc-private.h"
+ 
+ #if TARGET_OS_OSX
+-#include <Cambria/Traps.h>
+-#include <Cambria/Cambria.h>
++//#include <Cambria/Traps.h>
++//#include <Cambria/Cambria.h>
+ #endif
+ 
+ #if __arm__  ||  __x86_64__  ||  __i386__
+@@ -1118,14 +1118,14 @@
+ 
+         // Find out where thread is executing
+ #if TARGET_OS_OSX
+-        if (oah_is_current_process_translated()) {
+-            kern_return_t ret = objc_thread_get_rip(threads[count], (uint64_t*)&pc);
+-            if (ret != KERN_SUCCESS) {
+-                pc = PC_SENTINEL;
+-            }
+-        } else {
+-            pc = _get_pc_for_thread (threads[count]);
+-        }
++//        if (oah_is_current_process_translated()) {
++//            kern_return_t ret = objc_thread_get_rip(threads[count], (uint64_t*)&pc);
++//            if (ret != KERN_SUCCESS) {
++//                pc = PC_SENTINEL;
++//            }
++//        } else {
++//            pc = _get_pc_for_thread (threads[count]);
++//        }
+ #else
+         pc = _get_pc_for_thread (threads[count]);
+ #endif
+--- a/objc4/runtime/objc-os.h
++++ b/objc4/runtime/objc-os.h
+@@ -30,6 +30,7 @@
+ #define _OBJC_OS_H
+ 
+ #include <atomic>
++#include <utility>
+ #include <TargetConditionals.h>
+ #include "objc-config.h"
+ #include "objc-private.h"
+@@ -146,7 +147,7 @@
+ #   include <os/lock_private.h>
+ #   include <libkern/OSAtomic.h>
+ #   include <libkern/OSCacheControl.h>
+-#   include <System/pthread_machdep.h>
++//#   include <System/pthread_machdep.h>
+ #   include "objc-probes.h"  // generated dtrace probe definitions.
+ 
+ // Some libc functions call objc_msgSend() 
+@@ -1042,12 +1043,12 @@
+ // This version order matches OBJC_AVAILABLE.
+ //
+ // NOTE: prefer dyld_program_sdk_at_least when possible
+-#define sdkIsAtLeast(x, i, t, w, b)                                    \
+-    (dyld_program_sdk_at_least(dyld_platform_version_macOS_ ## x)   || \
+-     dyld_program_sdk_at_least(dyld_platform_version_iOS_ ## i)     || \
+-     dyld_program_sdk_at_least(dyld_platform_version_tvOS_ ## t)    || \
+-     dyld_program_sdk_at_least(dyld_platform_version_watchOS_ ## w) || \
+-     dyld_program_sdk_at_least(dyld_platform_version_bridgeOS_ ## b))
++#define sdkIsAtLeast(x, i, t, w, b)                                   true \
++//    (dyld_program_sdk_at_least(dyld_platform_version_macOS_ ## x)   || \
++//     dyld_program_sdk_at_least(dyld_platform_version_iOS_ ## i)     || \
++//     dyld_program_sdk_at_least(dyld_platform_version_tvOS_ ## t)    || \
++//     dyld_program_sdk_at_least(dyld_platform_version_watchOS_ ## w) || \
++//     dyld_program_sdk_at_least(dyld_platform_version_bridgeOS_ ## b))
+ 
+ 
+ #ifndef __BUILDING_OBJCDT__
+--- a/objc4/runtime/objc-os.mm
++++ b/objc4/runtime/objc-os.mm
+@@ -28,7 +28,7 @@
+ 
+ #include "objc-private.h"
+ #include "objc-loadmethod.h"
+-#include "objc-bp-assist.h"
++//#include "objc-bp-assist.h"
+ 
+ #if TARGET_OS_WIN32
+ 
+@@ -564,14 +564,14 @@
+         // Disable +initialize fork safety if the app has a
+         //   __DATA,__objc_fork_ok section.
+ 
+-        if (!dyld_program_sdk_at_least(dyld_platform_version_macOS_10_13)) {
+-            DisableInitializeForkSafety = true;
+-            if (PrintInitializing) {
+-                _objc_inform("INITIALIZE: disabling +initialize fork "
+-                             "safety enforcement because the app is "
+-                             "too old.)");
+-            }
+-        }
++//        if (!dyld_program_sdk_at_least(dyld_platform_version_macOS_10_13)) {
++//            DisableInitializeForkSafety = true;
++//            if (PrintInitializing) {
++//                _objc_inform("INITIALIZE: disabling +initialize fork "
++//                             "safety enforcement because the app is "
++//                             "too old.)");
++//            }
++//        }
+ 
+         for (uint32_t i = 0; i < hCount; i++) {
+             auto hi = hList[i];
+--- a/objc4/runtime/objc-runtime-new.mm
++++ b/objc4/runtime/objc-runtime-new.mm
+@@ -173,8 +173,8 @@
+ STATIC_ASSERT((~ISA_MAGIC_MASK & ISA_MAGIC_VALUE) == 0);
+ 
+ // die if virtual address space bound goes up
+-STATIC_ASSERT((~ISA_MASK & MACH_VM_MAX_ADDRESS) == 0  ||  
+-              ISA_MASK + sizeof(void*) == MACH_VM_MAX_ADDRESS);
++//STATIC_ASSERT((~ISA_MASK & MACH_VM_MAX_ADDRESS) == 0  ||
++//              ISA_MASK + sizeof(void*) == MACH_VM_MAX_ADDRESS);
+ 
+ // SUPPORT_PACKED_ISA
+ #else
+@@ -3544,13 +3544,13 @@
+ # if TARGET_OS_OSX
+         // Disable non-pointer isa if the app is too old
+         // (linked before OS X 10.11)
+-        if (!dyld_program_sdk_at_least(dyld_platform_version_macOS_10_11)) {
+-            DisableNonpointerIsa = true;
+-            if (PrintRawIsa) {
+-                _objc_inform("RAW ISA: disabling non-pointer isa because "
+-                             "the app is too old.");
+-            }
+-        }
++//        if (!dyld_program_sdk_at_least(dyld_platform_version_macOS_10_11)) {
++//            DisableNonpointerIsa = true;
++//            if (PrintRawIsa) {
++//                _objc_inform("RAW ISA: disabling non-pointer isa because "
++//                             "the app is too old.");
++//            }
++//        }
+ 
+         // Disable non-pointer isa if the app has a __DATA,__objc_rawisa section
+         // New apps that load old extensions may need this.
+@@ -8325,7 +8325,7 @@
+ static void
+ initializeTaggedPointerObfuscator(void)
+ {
+-    if (!DisableTaggedPointerObfuscation && dyld_program_sdk_at_least(dyld_fall_2018_os_versions)) {
++/*    if (!DisableTaggedPointerObfuscation && dyld_program_sdk_at_least(dyld_fall_2018_os_versions)) {
+         // Pull random data into the variable, then shift away all non-payload bits.
+         arc4random_buf(&objc_debug_taggedpointer_obfuscator,
+                        sizeof(objc_debug_taggedpointer_obfuscator));
+@@ -8348,6 +8348,7 @@
+         // in case they're relying on the tagged pointer representation.
+         objc_debug_taggedpointer_obfuscator = 0;
+     }
++ */
+ }
+ 
+ 
+--- a/objc4/runtime/objc-runtime.mm
++++ b/objc4/runtime/objc-runtime.mm
+@@ -33,7 +33,7 @@
+ * Imports.
+ **********************************************************************/
+ 
+-#include <os/feature_private.h> // os_feature_enabled_simple()
++//#include <os/feature_private.h> // os_feature_enabled_simple()
+ #include "objc-private.h"
+ #include "objc-loadmethod.h"
+ #include "objc-file.h"
+@@ -376,8 +376,8 @@
+     // older SDKs. LRU coalescing can reorder releases and certain older apps
+     // are accidentally relying on the ordering.
+     // rdar://problem/63886091
+-    if (!dyld_program_sdk_at_least(dyld_fall_2020_os_versions))
+-        DisableAutoreleaseCoalescingLRU = true;
++//    if (!dyld_program_sdk_at_least(dyld_fall_2020_os_versions))
++//        DisableAutoreleaseCoalescingLRU = true;
+ 
+     bool PrintHelp = false;
+     bool PrintOptions = false;
+@@ -441,9 +441,9 @@
+         }
+     }
+ 
+-    if (!os_feature_enabled_simple(objc4, preoptimizedCaches, true)) {
+-        DisablePreoptCaches = true;
+-    }
++//    if (!os_feature_enabled_simple(objc4, preoptimizedCaches, true)) {
++//        DisablePreoptCaches = true;
++//    }
+ 
+     // Print OBJC_HELP and OBJC_PRINT_OPTIONS output.
+     if (PrintHelp  ||  PrintOptions) {
