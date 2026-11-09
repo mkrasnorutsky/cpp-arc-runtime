@@ -20,6 +20,10 @@ void cpp_storeStrong(void** location, void* object) CPP_ARC_NOEXCEPT;
 /* Schedule one release, WITHOUT retaining. Transfers an existing +1 to pool.
  * That reference is reserved: an explicit release needs another owned +1.
  * Overscheduling and consuming reserved ownership abort before destruction. */
+void cpp_initStrong(void **location, void *object) CPP_ARC_NOEXCEPT;
+void cpp_destroyStrong(void **location) CPP_ARC_NOEXCEPT;
+void cpp_initStrongOwned(void **location, void *object) CPP_ARC_NOEXCEPT;
+void cpp_storeStrongOwned(void **location, void *object) CPP_ARC_NOEXCEPT;
 void* cpp_autorelease(void* object) CPP_ARC_NOEXCEPT;
 /* Tokens are opaque, thread-affine, single-use handles. Pop strictly LIFO.
  * Invalid/stale/foreign tokens and popping an ancestor during draining abort. */

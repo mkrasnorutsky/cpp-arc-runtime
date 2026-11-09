@@ -112,6 +112,23 @@ extern "C" void cpp_storeStrong(void** location, void* object) noexcept {
     *location = object;
     cpp_release(previous);
 }
+extern "C" void cpp_initStrong(void **location, void *object) noexcept {
+    cpp_retain(object);
+    *location = object;
+}
+extern "C" void cpp_destroyStrong(void **location) noexcept {
+    void *object = *location;
+    *location = nullptr;
+    cpp_release(object);
+}
+extern "C" void cpp_initStrongOwned(void **location, void *object) noexcept {
+    *location = object;
+}
+extern "C" void cpp_storeStrongOwned(void **location, void *object) noexcept {
+    void *previous = *location;
+    *location = object;
+    cpp_release(previous);
+}
 extern "C" size_t cpp_retainCount(void* object) noexcept {
     if (!object) return 0;
     auto& table = sideTables()[object];
